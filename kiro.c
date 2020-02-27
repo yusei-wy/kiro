@@ -24,8 +24,15 @@ struct termios orig_termios;
 // --- terminal ---
 
 void die(const char* s) {
+  editorRefreshScreen();
+
   perror(s);
   exit(1);
+}
+
+void clearScreen() {
+  write(STDOUT_FILENO, "\x1b[2J", 4);
+  write(STDOUT_FILENO, "\x1b[H", 3);
 }
 
 void disableRawMode() {
@@ -55,8 +62,7 @@ void enableRawMode() {
 
 // --- output ---
 void editorRefreshScreen() {
-  write(STDOUT_FILENO, "\x1b[2J", 4);
-  write(STDOUT_FILENO, "\x1b[H", 3);
+  clearScreen();
 }
 
 // --- input ---
@@ -79,6 +85,7 @@ void editorProcessKeypress() {
 
   switch (c) {
     case CTRL_KEY('q'):
+      clearScreen();
       exit(0);
       break;
   }
