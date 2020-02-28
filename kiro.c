@@ -1,4 +1,5 @@
 // --- includes ---
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
@@ -21,24 +22,26 @@
 
 struct termios orig_termios;
 
+// --- prototypes ---
+
+void die(const char *);
+void enableRawMode();
+void refreshScreen();
+void clearScreen();
+void repositionCursor();
+void disableRawMode();
+void editorDrawRows();
+void editorRefreshScreen();
+char editorReadKey();
+void editorProcessKeypress();
+
 // --- terminal ---
 
-void die(const char* s) {
-  editorRefreshScreen();
+void die(const char *s) {
+  refreshScreen();
 
   perror(s);
   exit(1);
-}
-
-void clearScreen() {
-  write(STDOUT_FILENO, "\x1b[2J", 4);
-  write(STDOUT_FILENO, "\x1b[H", 3);
-}
-
-void disableRawMode() {
-  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1) {
-    die("tcsetattr");
-  }
 }
 
 void enableRawMode() {
@@ -61,8 +64,33 @@ void enableRawMode() {
 }
 
 // --- output ---
-void editorRefreshScreen() {
+
+void refreshScreen() {
   clearScreen();
+  repositionCursor();
+}
+
+void clearScreen() { write(STDOUT_FILENO, "\x1b[2J", 4); }
+void repositionCursor() { write(STDOUT_FILENO, "\x1b[H", 3); }
+
+void disableRawMode() {
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1) {
+    die("tcsetattr");
+  }
+}
+
+void editorDrawRows() {
+  for (int y = 0; y < 24; y++) {
+    write(STDOUT_FILENO, "~\r\n", 3);
+  }
+}
+
+void editorRefreshScreen() {
+  refreshScreen();
+
+  editorDrawRows();
+
+  write(STDERR_FILENO, "\x1b[H", 3);
 }
 
 // --- input ---
@@ -85,7 +113,7 @@ void editorProcessKeypress() {
 
   switch (c) {
     case CTRL_KEY('q'):
-      clearScreen();
+      refreshScreen();
       exit(0);
       break;
   }
