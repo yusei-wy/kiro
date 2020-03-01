@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -21,6 +22,8 @@
 // --- data ---
 
 struct EditorConfig {
+  int screenrows;
+  int screencols;
   struct termios orig_termios;
 };
 
@@ -36,8 +39,10 @@ void repositionCursor();
 void disableRawMode();
 void editorDrawRows();
 void editorRefreshScreen();
-char editorReadKey();
 void editorProcessKeypress();
+char editorReadKey();
+int getWindowSize(int *, int *);
+void initEditor();
 
 // --- terminal ---
 
@@ -83,12 +88,6 @@ void disableRawMode() {
   }
 }
 
-void editorDrawRows() {
-  for (int y = 0; y < 24; y++) {
-    write(STDOUT_FILENO, "~\r\n", 3);
-  }
-}
-
 void editorRefreshScreen() {
   refreshScreen();
 
@@ -97,20 +96,13 @@ void editorRefreshScreen() {
   write(STDERR_FILENO, "\x1b[H", 3);
 }
 
-// --- input ---
-
-char editorReadKey() {
-  int nread;
-  char c;
-  while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
-    if (nread == -1 && errno != EAGAIN) {
-      die("read");
-    }
+void editorDrawRows() {
+  for (int y = 0; y < E.screenrows; y++) {
+    write(STDOUT_FILENO, "~\r\n", 3);
   }
-  return c;
 }
 
-// --- init ---
+// --- input ---
 
 void editorProcessKeypress() {
   char c = editorReadKey();
@@ -123,8 +115,40 @@ void editorProcessKeypress() {
   }
 }
 
+char editorReadKey() {
+  int nread;
+  char c;
+  while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
+    if (nread == -1 && errno != EAGAIN) {
+      die("read");
+    }
+  }
+  return c;
+}
+
+int getWindowSize(int *rows, int *cols) {
+  struct winsize ws;
+
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+    return -1;
+  }
+
+  *cols = ws.ws_col;
+  *rows = ws.ws_row;
+  return 0;
+}
+
+// --- init ---
+
+void initEditor() {
+  if (getWindowSize(&E.screenrows, &E.screencols) == -1) {
+    die("getWindowSize");
+  }
+}
+
 int main() {
   enableRawMode();
+  initEditor();
 
   while (TRUE) {
     editorRefreshScreen();
