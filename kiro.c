@@ -32,16 +32,19 @@ struct EditorConfig E;
 // --- prototypes ---
 
 void die(const char *);
+void disableRawMode();
 void enableRawMode();
+int getWindowSize(int *, int *);
+
+void editorDrawRows();
+void editorRefreshScreen();
 void refreshScreen();
 void clearScreen();
 void repositionCursor();
-void disableRawMode();
-void editorDrawRows();
-void editorRefreshScreen();
+
 void editorProcessKeypress();
 char editorReadKey();
-int getWindowSize(int *, int *);
+
 void initEditor();
 
 // --- terminal ---
@@ -51,6 +54,12 @@ void die(const char *s) {
 
   perror(s);
   exit(1);
+}
+
+void disableRawMode() {
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1) {
+    die("tcsetattr");
+  }
 }
 
 void enableRawMode() {
@@ -72,21 +81,19 @@ void enableRawMode() {
   }
 }
 
-// --- output ---
+int getWindowSize(int *rows, int *cols) {
+  struct winsize ws;
 
-void refreshScreen() {
-  clearScreen();
-  repositionCursor();
-}
-
-void clearScreen() { write(STDOUT_FILENO, "\x1b[2J", 4); }
-void repositionCursor() { write(STDOUT_FILENO, "\x1b[H", 3); }
-
-void disableRawMode() {
-  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1) {
-    die("tcsetattr");
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+    return -1;
   }
+
+  *cols = ws.ws_col;
+  *rows = ws.ws_row;
+  return 0;
 }
+
+// --- output ---
 
 void editorRefreshScreen() {
   refreshScreen();
@@ -101,6 +108,15 @@ void editorDrawRows() {
     write(STDOUT_FILENO, "~\r\n", 3);
   }
 }
+
+void refreshScreen() {
+  clearScreen();
+  repositionCursor();
+}
+
+void clearScreen() { write(STDOUT_FILENO, "\x1b[2J", 4); }
+
+void repositionCursor() { write(STDOUT_FILENO, "\x1b[H", 3); }
 
 // --- input ---
 
@@ -124,18 +140,6 @@ char editorReadKey() {
     }
   }
   return c;
-}
-
-int getWindowSize(int *rows, int *cols) {
-  struct winsize ws;
-
-  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-    return -1;
-  }
-
-  *cols = ws.ws_col;
-  *rows = ws.ws_row;
-  return 0;
 }
 
 // --- init ---
