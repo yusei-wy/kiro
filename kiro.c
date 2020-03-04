@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -21,28 +22,40 @@
 
 // --- data ---
 
-struct EditorConfig {
+typedef struct _EditorConfig {
   int screenrows;
   int screencols;
   struct termios orig_termios;
-};
+} EditorConfig;
 
-struct EditorConfig E;
+EditorConfig E;
+
+typedef struct _ABuf {
+  char *b;
+  int len;
+} ABuf;
+
+#define ABUF_INIT \
+  { NULL, 0 }
 
 // --- prototypes ---
 
 void die(const char *);
+void writeRefresh();
 void disableRawMode();
 void enableRawMode();
 char editorReadKey();
 int getCursorPosition(int *, int *);
 int getWindowSize(int *, int *);
 
-void editorDrawRows();
+void abAppend(ABuf *, const char *, int);
+void adFree(ABuf *);
+
+void editorDrawRows(ABuf *);
 void editorRefreshScreen();
-void refreshScreen();
-void clearScreen();
-void repositionCursor();
+void refreshScreen(ABuf *);
+void clearScreen(ABuf *);
+void repositionCursor(ABuf *);
 
 void editorProcessKeypress();
 
@@ -51,7 +64,7 @@ void initEditor();
 // --- terminal ---
 
 void die(const char *s) {
-  refreshScreen();
+  writeRefresh();
 
   perror(s);
   exit(1);
@@ -80,6 +93,11 @@ void enableRawMode() {
   if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) {
     die("tcsetattr");
   }
+}
+
+void writeRefresh() {
+  write(STDOUT_FILENO, "\x1b[2J", 4);
+  write(STDOUT_FILENO, "\x1b[H", 3);
 }
 
 char editorReadKey() {
@@ -137,33 +155,52 @@ int getWindowSize(int *rows, int *cols) {
   return 0;
 }
 
+// --- append buffer ---
+
+void abAppend(ABuf *ab, const char *s, int len) {
+  char *new = realloc(ab->b, ab->len + len);
+  if (new == NULL) {
+    return;
+  }
+
+  memcpy(&new[ab->len], s, len);
+  ab->b = new;
+  ab->len += len;
+}
+
+void abFree(ABuf *ab) { free(ab->b); }
+
 // --- output ---
 
 void editorRefreshScreen() {
-  refreshScreen();
+  ABuf ab = ABUF_INIT;
 
-  editorDrawRows();
+  refreshScreen(&ab);
 
-  write(STDOUT_FILENO, "\x1b[H", 3);
+  editorDrawRows(&ab);
+
+  abAppend(&ab, "\x1b[H", 3);
+
+  write(STDOUT_FILENO, ab.b, ab.len);
+  abFree(&ab);
 }
 
-void editorDrawRows() {
+void editorDrawRows(ABuf *ab) {
   for (int y = 0; y < E.screenrows; y++) {
-    write(STDOUT_FILENO, "~", 1);
+    abAppend(ab, "~", 1);
 
     if (y < E.screenrows - 1) {
-      write(STDOUT_FILENO, "\r\n", 2);
+      abAppend(ab, "\r\n", 2);
     }
   }
 }
 
-void refreshScreen() {
-  clearScreen();
-  repositionCursor();
+void refreshScreen(ABuf *ab) {
+  clearScreen(ab);
+  repositionCursor(ab);
 }
-
-void clearScreen() { write(STDOUT_FILENO, "\x1b[2J", 4); }
-void repositionCursor() { write(STDOUT_FILENO, "\x1b[H", 3); }
+void clearScreen(ABuf *ab) { abAppend(ab, "\x1b[2J", 4); }
+void repositionCursor(ABuf *ab) { abAppend(ab, "\x1b[H", 3); }
 
 // --- input ---
 
@@ -172,7 +209,7 @@ void editorProcessKeypress() {
 
   switch (c) {
     case CTRL_KEY('q'):
-      refreshScreen();
+      writeRefresh();
       exit(0);
       break;
   }
