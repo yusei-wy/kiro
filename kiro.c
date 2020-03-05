@@ -53,9 +53,6 @@ void adFree(ABuf *);
 
 void editorDrawRows(ABuf *);
 void editorRefreshScreen();
-void refreshScreen(ABuf *);
-void clearScreen(ABuf *);
-void repositionCursor(ABuf *);
 
 void editorProcessKeypress();
 
@@ -175,11 +172,14 @@ void abFree(ABuf *ab) { free(ab->b); }
 void editorRefreshScreen() {
   ABuf ab = ABUF_INIT;
 
-  refreshScreen(&ab);
+  abAppend(&ab, "\x1b[?25l", 6);
+  abAppend(&ab, "\x1b[2J", 4);
+  abAppend(&ab, "\x1b[H", 3);
 
   editorDrawRows(&ab);
 
   abAppend(&ab, "\x1b[H", 3);
+  abAppend(&ab, "\x1b[?25h", 6);
 
   write(STDOUT_FILENO, ab.b, ab.len);
   abFree(&ab);
@@ -194,13 +194,6 @@ void editorDrawRows(ABuf *ab) {
     }
   }
 }
-
-void refreshScreen(ABuf *ab) {
-  clearScreen(ab);
-  repositionCursor(ab);
-}
-void clearScreen(ABuf *ab) { abAppend(ab, "\x1b[2J", 4); }
-void repositionCursor(ABuf *ab) { abAppend(ab, "\x1b[H", 3); }
 
 // --- input ---
 
